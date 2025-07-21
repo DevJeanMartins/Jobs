@@ -1,0 +1,366 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gerenciador de Tarefas do Jean</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #f9f9fb;
+      margin: 0;
+      padding: 1rem;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .logo {
+      width: 40px;
+      height: 40px;
+    }
+    h1 {
+      font-size: 1.5rem;
+      color: #333;
+    }
+    .dashboard {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .card {
+      background: #ffffff;
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      font-weight: bold;
+      color: #444;
+    }
+    .filters {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+    }
+    .filters input {
+      padding: 0.5rem;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    .add-task-container {
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    button {
+      background-color: #4a90e2;
+      color: white;
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    .board {
+      display: flex;
+      gap: 1rem;
+    }
+    .column {
+      flex: 1;
+      padding: 1rem;
+      border-radius: 8px;
+      min-height: 300px;
+      max-height: 500px;
+      overflow-y: auto;
+      background: #ffffff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .todo { border-top: 4px solid #f39c12; }
+    .inprogress { border-top: 4px solid #3498db; }
+    .done { border-top: 4px solid #2ecc71; }
+    .task {
+      background: #f4f4f4;
+      padding: 0.5rem;
+      margin-bottom: 0.5rem;
+      border-radius: 5px;
+    }
+    .task.overdue { background-color: #ffe5e5; }
+    .task.today { background-color: #fff8dc; }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.4);
+      z-index: 10;
+    }
+    .modal-content {
+      background: white;
+      margin: 5% auto;
+      padding: 1rem;
+      width: 400px;
+      max-width: 90%;
+      border-radius: 8px;
+      position: relative;
+    }
+    .modal-content input,
+    .modal-content textarea,
+    .modal-content select {
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 0.5rem;
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .close {
+      position: absolute;
+      top: 10px; right: 15px;
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+    .task-buttons {
+      margin-top: 0.5rem;
+    }
+    .task-buttons button {
+      margin-right: 0.3rem;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="https://via.placeholder.com/40" alt="Logo" class="logo" />
+    <h1>Bem-vindo ao gerenciamento de tarefas do Jean!</h1>
+  </div>
+
+  <div class="dashboard">
+    <div class="card">Total Tasks: <span id="total">0</span></div>
+    <div class="card">In Progress: <span id="inprogress">0</span></div>
+    <div class="card">Completed: <span id="done">0</span></div>
+  </div>
+
+  <div class="filters">
+    <input type="text" id="filterRequester" placeholder="Filtrar por solicitante" oninput="applyFilters()" />
+    <input type="text" id="filterTitle" placeholder="Filtrar por título" oninput="applyFilters()" />
+    <input type="date" id="filterDate" oninput="applyFilters()" />
+  </div>
+
+  <div class="add-task-container">
+    <button onclick="openForm()">➕ Nova Tarefa</button>
+  </div>
+
+  <div class="board">
+    <div class="column todo">
+      <h3>📝 To Do</h3>
+    </div>
+    <div class="column inprogress">
+      <h3>🚧 In Progress</h3>
+    </div>
+    <div class="column done">
+      <h3>✅ Done</h3>
+    </div>
+  </div>
+
+  <div id="taskForm" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeForm()">&times;</span>
+      <h2 id="formTitle">Nova Tarefa</h2>
+      <input type="text" id="requester" placeholder="Nome do Solicitante" />
+      <input type="text" id="title" placeholder="Título" />
+      <textarea id="desc" placeholder="Descrição"></textarea>
+      <input type="date" id="date" />
+      <select id="columnSelect">
+        <option value="todo">To Do</option>
+        <option value="inprogress">In Progress</option>
+        <option value="done">Done</option>
+      </select>
+      <input type="file" id="file" />
+      <div id="formButtons">
+        <button onclick="enviarParaSharePoint(title, desc, date, requester, columnSelect); submitTask()">Adicionar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentEditTask = null;
+    let deleteMode = false;
+
+    function openForm(task = null, mode = 'add') {
+      document.getElementById("taskForm").style.display = "block";
+      document.getElementById("formTitle").innerText = mode === 'edit' ? "Editar Tarefa" : "Nova Tarefa";
+      document.getElementById("formButtons").innerHTML = mode === 'edit'
+        ? '<button onclick="submitTask(enviarParaSharePoint(title, desc, date, requester, columnSelect))">Salvar</button>'
+        : '<button onclick="submitTask(enviarParaSharePoint(title, desc, date, requester, columnSelect))">Adicionar</button>';
+      if (task) {
+        document.getElementById("requester").value = task.dataset.requester;
+        document.getElementById("title").value = task.dataset.title;
+        document.getElementById("desc").value = task.dataset.desc;
+        document.getElementById("date").value = task.dataset.date;
+        document.getElementById("columnSelect").value = task.dataset.column;
+        currentEditTask = task;
+      } else {
+        document.getElementById("requester").value = "";
+        document.getElementById("title").value = "";
+        document.getElementById("desc").value = "";
+        document.getElementById("date").value = "";
+        document.getElementById("columnSelect").value = "todo";
+        currentEditTask = null;
+      }
+    }
+
+    function closeForm() {
+      document.getElementById("taskForm").style.display = "none";
+      deleteMode = false;
+    }
+
+    function submitTask() {
+      const requester = document.getElementById("requester").value;
+      const title = document.getElementById("title").value;
+      const desc = document.getElementById("desc").value;
+      const date = document.getElementById("date").value;
+      const column = document.getElementById("columnSelect").value;
+
+      if (deleteMode && currentEditTask) {
+        currentEditTask.remove();
+        updateDashboard();
+        closeForm();
+        return;
+      }
+
+      const task = currentEditTask || document.createElement("div");
+      task.className = "task";
+      task.draggable = true;
+      task.ondragstart = drag;
+      task.dataset.requester = requester;
+      task.dataset.title = title;
+      task.dataset.desc = desc;
+      task.dataset.date = date;
+      task.dataset.column = column;
+
+      const today = new Date().toISOString().split("T")[0];
+      task.classList.remove("overdue", "today");
+      if (date < today) task.classList.add("overdue");
+      else if (date === today) task.classList.add("today");
+
+      task.innerHTML = `
+        <strong>${title}</strong><br>${desc}<br><small>${date}</small><br><em>${requester}</em>
+        <div class="task-buttons">
+          <button onclick="openForm(this.parentElement.parentElement, 'edit')">✏️</button>
+          <button onclick="confirmDelete(this.parentElement.parentElement)">🗑️</button>
+        </div>
+      `;
+
+      if (!currentEditTask) {
+        document.querySelector("." + column).appendChild(task);
+      }
+
+      updateDashboard();
+      closeForm();
+    }
+
+    function confirmDelete(task) {
+      openForm(task, 'edit');
+      document.getElementById("formTitle").innerText = "Confirmar Exclusão";
+      document.getElementById("formButtons").innerHTML = `
+        <button onclick="deleteMode=true;submitTask(enviarParaSharePoint(title, desc, date, requester, columnSelect))">Sim</button>
+        <button onclick="closeForm()">Não</button>
+      `;
+    }
+
+    function updateDashboard() {
+      const total = document.querySelectorAll(".task").length;
+      const inProgress = document.querySelectorAll(".inprogress .task").length;
+      const done = document.querySelectorAll(".done .task").length;
+      document.getElementById("total").innerText = total;
+      document.getElementById("inprogress").innerText = inProgress;
+      document.getElementById("done").innerText = done;
+    }
+
+    function allowDrop(ev) {
+      ev.preventDefault();
+    }
+
+    function drag(ev) {
+      ev.dataTransfer.setData("text", ev.target.outerHTML);
+      ev.target.remove();
+    }
+
+    function drop(ev, columnClass) {
+      ev.preventDefault();
+      const data = ev.dataTransfer.getData("text");
+      const column = document.querySelector(`.${columnClass}`);
+      column.insertAdjacentHTML("beforeend", data);
+      const newTask = column.lastElementChild;
+      newTask.draggable = true;
+      newTask.ondragstart = drag;
+      updateDashboard();
+    }
+
+    function applyFilters() {
+      const requester = document.getElementById("filterRequester").value.toLowerCase();
+      const title = document.getElementById("filterTitle").value.toLowerCase();
+      const date = document.getElementById("filterDate").value;
+      document.querySelectorAll(".task").forEach(task => {
+        const match = (
+          task.dataset.requester.toLowerCase().includes(requester) &&
+          task.dataset.title.toLowerCase().includes(title) &&
+          (date === "" || task.dataset.date === date)
+        );
+        task.style.display = match ? "" : "none";
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.querySelectorAll(".column").forEach(col => {
+        col.ondragover = allowDrop;
+        col.ondrop = (e) => drop(e, col.classList[1]);
+      });
+    });
+	
+	async function enviarParaSharePoint(tituloInput, descricaoInput, dataInput, solicitanteInput, statusInput) {
+    const titulo = tituloInput.value.trim();
+    const descricao = descricaoInput.value.trim();
+    const data = dataInput.value;
+    const solicitante = solicitanteInput.value.trim();
+    const status = statusInput.value;
+
+    if (!titulo || !descricao || !data || !solicitante || !status) {
+      alert("Todos os campos são obrigatórios!");
+      return;
+    }
+
+    const url = "https://prod-62.westus.logic.azure.com:443/workflows/437641efcee940b7b8d5f8fa66b93601/triggers/manual/paths/invoke?api-version=2016-06-01"; // Cole aqui a URL do gatilho do fluxo
+
+    const payload = {
+      titulo,
+      descricao,
+      data,
+      solicitante,
+      status
+    };
+
+      try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        console.log("Tarefa enviada com sucesso ao SharePoint!");
+      } else {
+        console.error("Erro ao enviar tarefa:", await response.text());
+      }
+    } catch (error) {
+      console.error("Erro de rede:", error);
+    }
+  }
+	
+  </script>
+  </body>
+</html>
+
+
